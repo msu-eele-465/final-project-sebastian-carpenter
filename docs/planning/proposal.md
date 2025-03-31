@@ -121,7 +121,7 @@ Storing audio from the microphone which the master will access or write to as ne
 ### Argument for Desired Prescaler
 
 * Have 3 inputs and 3 outputs -> I have 4 inputs and 5 outputs (maybe 4).
-* Use a mster/slave topology -> I have the controller as the master and the 2310 as a slave, though it is only responsible for being storage.
+* Use a master/slave topology -> I have the 2355 as the master and the 2310 as a slave, though it is only responsible for being storage.
 * Have a "real objective" -> My objective is a system for recording audio: this has applications to industry.
 * Include 2 new types of hardware -> I am using 4 items never used before. 
 * The new hardware must be somewhat complex to implement -> the mic and speaker require me to learn op-amps which is somewhat difficult. For the accelerometer I need to interpret the angular velocity and tilt which may be fairly difficult. The rotary encoder should not be too difficult.
