@@ -1,0 +1,28 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "CCS Debug",
+            "type": "ccs-debug",
+            "request": "launch"
+        },
+        {
+            "name": "lcd",
+            "type": "ccs-debug",
+            "request": "launch",
+            "projectInfo": {
+                "name": "lcd",
+                "resourceId": "/lcd"
+            }
+        },
+        {
+            "name": "led-bar",
+            "type": "ccs-debug",
+            "request": "launch",
+            "projectInfo": {
+                "name": "led-bar",
+                "resourceId": "/led-bar"
+            }
+        }
+    ]
+}
