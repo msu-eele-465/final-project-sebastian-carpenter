@@ -1,6 +1,8 @@
 #include <msp430fr2355.h>
 #include <stdint.h>
 
+#include "./led_bar.h"
+
 void init_led_bar(void){
     // setup P2.6 - P2.7 as outputs
     P2SEL0 &= ~(BIT6 | BIT7);
