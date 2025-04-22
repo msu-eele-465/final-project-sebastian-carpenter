@@ -1,13 +1,7 @@
 #ifndef MIC_H
 #define MIC_H
 
-#include <stdint.h>
-
-
-/* --- mic --- */
-
-
-// setup the ADC pin  to capture signals from the mic
+// setup the ADC pin to capture signals from the mic P1.0
 // ---> run before turning on GPIO
 void init_mic(void);
 

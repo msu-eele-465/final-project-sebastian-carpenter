@@ -1,5 +1,6 @@
 #include <msp430fr2355.h>
-#include <stdint.h>
+
+#include "./mic.h"
 
 void init_mic(void){
 	P1SEL0 |= BIT0;
