@@ -17,4 +17,16 @@
 		<nature>org.eclipse.cdt.managedbuilder.core.managedBuildNature</nature>
 		<nature>org.eclipse.cdt.core.ccnature</nature>
 	</natures>
+	<linkedResources>
+		<link>
+			<name>app/i2c.c</name>
+			<type>1</type>
+			<location>C:/Users/sebas/Documents/College/Junior/Semester 6/EELE 465/final-project/final-project-sebastian-carpenter/i2c/src/i2c.c</location>
+		</link>
+		<link>
+			<name>app/i2c.h</name>
+			<type>1</type>
+			<location>C:/Users/sebas/Documents/College/Junior/Semester 6/EELE 465/final-project/final-project-sebastian-carpenter/i2c/src/i2c.h</location>
+		</link>
+	</linkedResources>
 </projectDescription>

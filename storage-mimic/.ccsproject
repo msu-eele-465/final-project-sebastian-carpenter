@@ -4,11 +4,9 @@
 	<ccsVariant value="50:Theia-based"/>
 	<ccsVersion value="70.0.0"/>
 	<deviceFamily value="MSP430"/>
-	<executableActions value=""/>
-	<createSlaveProjects value=""/>
-	<templateProperties value="id=BlinkLED_MSP-EXP430FR2355.projectspec.controller"/>
 	<connection value="common/targetdb/connections/TIMSP430-USB.xml"/>
-	<activeTargetConfiguration value="targetConfigs/MSP430FR2355.ccxml"/>
-	<origin value="C:\ti\msp430ware_3_80_14_01\examples\boards\MSP-EXP430FR2355\MSP-EXP430FR2355_Software_Examples\Firmware\Source\BlinkLED_MSP-EXP430FR2355\CCS\BlinkLED_MSP-EXP430FR2355.projectspec"/>
-	<filesToOpen value="main.c"/>
+	<createSlaveProjects value=""/>
+	<activeTargetConfiguration value="targetConfigs/MSP430FR2310.ccxml"/>
+	<isTargetConfigurationManual value="false"/>
+	<filesToOpen value=""/>
 </projectOptions>
