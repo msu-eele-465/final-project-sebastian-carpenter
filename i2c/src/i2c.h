@@ -30,4 +30,14 @@ void i2c_write(uint8_t device_address, uint8_t register_address, uint8_t *buffer
 //  the buffer WILL be changed
 void i2c_read(uint8_t device_address, uint8_t register_address, uint8_t *buffer, uint8_t count);
 
+
+/* --- slave --- */
+
+// setup I2C for slave mode
+// the slave address (self) will be set to what is provided
+// the buffer will be what is read and written from
+// each register address will store a cetain number of bytes
+// ---> run after turning on GPIO
+void configure_i2c_slave(uint8_t slave_address, uint8_t *buffer, uint8_t size_of_registers);
+
 #endif
