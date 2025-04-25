@@ -1,4 +1,4 @@
-#include "src/led_bar.h"
+#include "../src/led_bar.h"
 #include <msp430fr2355.h>
 #include <stdint.h>
 
