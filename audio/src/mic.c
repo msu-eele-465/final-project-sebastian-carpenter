@@ -9,7 +9,7 @@ void init_mic(void){
 
 void configure_mic(void){
 	// select 16 conversion cycles
-	ADCCTL0 &= !ADCSHT;
+	ADCCTL0 &= ~ADCSHT;
 	ADCCTL0 |= ADCSHT_2;
 	// turn ADC on
 	ADCCTL0 |= ADCON;
