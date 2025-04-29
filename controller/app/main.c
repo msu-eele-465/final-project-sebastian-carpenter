@@ -15,9 +15,8 @@
 #include "intrinsics.h"
 
 
-// each location is 224 bytes and there are 4 of them
-#define LOCATION_SIZE 224
-#define LOCATION_SIZE_ADDRESSABLE 14
+// each location is 971 bytes and there are 4 of them
+#define LOCATION_SIZE 7000
 #define LOCATION_MAX 0x03
 
 
@@ -35,36 +34,24 @@ static enum system_mode_enum system_mode = LOCKED;
 
 // these locations are references to a portion of the
 // 	memory for the recorded/recording audio
+// altered by the rotary encoders
 static uint8_t location_1 = 0, location_2 = 0;
 
-// used for sending and receiving audio data from storage
-static uint8_t buffer_1_a[16];
-static uint8_t buffer_1_b[16];
-static uint8_t buffer_2_a[16];
-static uint8_t buffer_2_b[16];
-static uint8_t buffer_1_index = 0;
-static uint8_t buffer_2_index = 0;
-
-// TEMPORARY: used for mimicing i2c storage right now
+#pragma PERSISTENT(storage)
 static uint8_t storage[LOCATION_SIZE * 4] = {0};
-static uint8_t storage_index_1, storage_index_2;
-static uint8_t storage_index_1_max, storage_index_2_max;
+
+// storage for audio, variety of variables to increase speed
+static uint8_t *storage_pointer_1, *storage_pointer_2;
+static uint8_t *storage_pointer_1_start, *storage_pointer_2_start;
+static uint16_t storage_index;
 
 
 /* --- important functions --- */
 
 
 // update the LCD with the relevant mode and location information
-// update the status LED with recording state
 // update the LED bar with the mic input strength
 void _update_state(void);
-
-// send the provided buffer to i2c storage
-void _send_to_storage(uint8_t buffer_to_store[16]);
-
-// read i2c storage into the provided buffer
-// index_number -> 0 is buffer_1, 1 is buffer_2
-void _receive_from_storage(uint8_t buffer_to_store[16], uint8_t index_number);
 
 
 /* --- main loop --- */
@@ -100,8 +87,6 @@ int main(void) {
 
 
 	// stores the movement of the rotary encoders whether CW or CCW
-	// because it is done using polling each rotary encoder should
-	// 	NOT be turned quickly
 	static enum rotary_encoder rotary_1, rotary_2;
 	init_rotary_encoders(&rotary_1, &rotary_2);
 
@@ -137,46 +122,44 @@ int main(void) {
 
 				system_mode = RECORDING;
 
-				storage_index_1 = location_1 * LOCATION_SIZE_ADDRESSABLE;
-				storage_index_1_max = storage_index_1 + LOCATION_SIZE_ADDRESSABLE;
+				P5OUT |= BIT3;
+
+				storage_pointer_1 = storage + (uint16_t)(location_1) * LOCATION_SIZE;
+				storage_index = 0;
 
 				// recording can occur, turn on interrupt
 				set_mic_interrupt();
 			}
 			else if (system_mode == RECORDING)
 			{
-				system_mode = RECORD;
-
 				// recording has stopped, turn off interrupt
 				clear_mic_interrupt();
+
+				P5OUT &= ~BIT3;
+
+				system_mode = RECORD;
 			}
 			else if (system_mode == PLAYBACK)
 			{
 				system_mode = PLAYING;
 
-				storage_index_1 = location_1 * LOCATION_SIZE_ADDRESSABLE;
-				storage_index_2 = location_2 * LOCATION_SIZE_ADDRESSABLE;
-				storage_index_1_max = storage_index_1 + LOCATION_SIZE_ADDRESSABLE;
-				storage_index_2_max = storage_index_2 + LOCATION_SIZE_ADDRESSABLE;
+				storage_pointer_1_start = storage + (uint16_t)(location_1) * LOCATION_SIZE;
+				storage_pointer_1 = storage_pointer_1_start;
 
-				// retrieve 4 initial buffers from storage
-				_receive_from_storage(buffer_1_a, 0);
-				__delay_cycles(1000);
-				_receive_from_storage(buffer_1_b, 0);
-				__delay_cycles(1000);
-				_receive_from_storage(buffer_2_a, 1);
-				__delay_cycles(1000);
-				_receive_from_storage(buffer_2_b, 1);
+				storage_pointer_2_start = storage + (uint16_t)(location_2) * LOCATION_SIZE;
+				storage_pointer_2 = storage_pointer_2_start;
 
-				// playing has started, turn on interrupts
-				set_speaker_interrupts();
+				storage_index = 0;
+
+				// playing has started, turn on interrupt
+				set_speaker_interrupt();
 			}
 			else if (system_mode == PLAYING)
 			{
-				system_mode = PLAYBACK;
+				// playing has stopped, turn off interrupt
+				clear_speaker_interrupt();
 
-				// playing has stopped, turn off interrupts
-				clear_speaker_interrupts();
+				system_mode = PLAYBACK;
 			}
 
 			_update_state();
@@ -263,9 +246,6 @@ int main(void) {
 #define L2_START 13
 
 void _update_state(void){
-
-	// update LCD
-
 	const char *locked_line_1 = "MODE: locked    ";
 	const char *record_line = "MODE: record    ";
 	const char *recording_line = "MODE: recording ";
@@ -291,6 +271,25 @@ void _update_state(void){
 	else if (system_mode == RECORDING)
 	{
 		lcd_print_line(recording_line, 0);
+
+		// also update led bar with recording strength
+		uint8_t *temp_storage_pointer = storage_pointer_1;
+		uint8_t largest = *temp_storage_pointer;
+		uint8_t samples = 10;
+		while (--samples > 0)
+		{
+			// if beginning of storage is hit, terminate early
+			if (--temp_storage_pointer < storage)
+			{
+				samples = 0;
+			}
+			else if (*temp_storage_pointer > largest)
+			{
+				largest = *temp_storage_pointer;
+			}
+		}
+
+		update_led_bar(largest);
 	}
 	else if (system_mode == PLAYBACK)
 	{
@@ -305,186 +304,54 @@ void _update_state(void){
 		lcd_print_line(playing_line, 0);
 	}
 
-	// update status LED
-	
-	if (system_mode == RECORD)
-	{
-		P2OUT &= ~BIT1;
-	}
-	else if (system_mode == RECORDING)
-	{
-		P2OUT |= BIT1;
-	}
-
 	// delay for 200ms
 	// this prevents a switch from being pressed multiple times on accident
 	__delay_cycles(200000);
-}
-
-void _send_to_storage(uint8_t buffer_to_store[16]){
-	uint8_t *storage_pointer = storage;
-	storage_pointer += (uint16_t)(storage_index_1) * 16;
-
-	uint8_t i;
-	for (i = 16; i > 0; i--)
-	{
-		*storage_pointer++ = *buffer_to_store++;
-	}
-
-	storage_index_1++;
-}
-
-void _receive_from_storage(uint8_t buffer_to_store[16], uint8_t index_number){
-	// selects the appropriate location in memory
-	uint8_t *storage_pointer = storage;
-	storage_pointer += (index_number) ? ((uint16_t)(storage_index_2) * 16) : ((uint16_t)(storage_index_1) * 16);
-
-	uint8_t i;
-	for (i = 16; i > 0; i--)
-	{
-		*buffer_to_store++ = *storage_pointer++;
-	}
-
-	(index_number) ? (storage_index_2++) : (storage_index_1++);
 }
 
 
 /* --- interrupts --- */
 
 
-// which buffer is in use
-enum buffer_mode {
-	ONE, TWO
-};
-
 // CCR0
 #pragma vector=TIMER0_B0_VECTOR
-__interrupt void speaker_1_and_mic_ISR(void)
+__interrupt void speaker_and_mic_ISR(void)
 {
-	static enum buffer_mode buffer_1_mode = ONE;
-
 	if (system_mode == RECORDING)
 	{
-		// capture audio from the mic and store in the correct buffer
+		// capture audio from the mic and store it
 		// additionally, sample preemptively for the next interrupt
-		if (buffer_1_mode == ONE)
-		{
-			record_mic(buffer_1_a[buffer_1_index]);
-			sample_mic();
-			buffer_1_index++;
-
-			// send full buffer to storage
-			if (buffer_1_index >= 16)
-			{
-				_send_to_storage(buffer_1_a);
-				buffer_1_index = 0;
-				buffer_1_mode = TWO;
-			}
-		}
-		else
-		{
-			record_mic(buffer_1_b[buffer_1_index]);
-			sample_mic();
-			buffer_1_index++;
-
-			// send full buffer to storage
-			if (buffer_1_index >= 16)
-			{
-				_send_to_storage(buffer_1_b);
-				buffer_1_index = 0;
-				buffer_1_mode = ONE;
-			}
-		}
+		record_mic(*storage_pointer_1++);
+		sample_mic();
+		storage_index++;
 
 		// stop recording if the location is filled
-		if (storage_index_1 >= storage_index_1_max)
+		// system state will remain as RECORDING
+		// 	this is intentional as it shows the user that they
+		// 	exceeded the recording slot's capacity
+		if (storage_index >= LOCATION_SIZE)
 		{
 			clear_mic_interrupt();
-			system_mode = RECORD;
-			_update_state();
+			P5OUT &= ~BIT3;
 		}
 	}
 	else if (system_mode == PLAYING)
 	{
-		// cycle buffers to play from
-		if (buffer_1_mode == ONE)
-		{
-			update_speaker_1(buffer_1_a[buffer_1_index] << 4);
-			buffer_1_index++;
+		// speaker 1
 
-			// receive full buffer from storage
-			if (buffer_1_index >= 16)
-			{
-				_receive_from_storage(buffer_1_a, 0);
-				buffer_1_mode = TWO;
-				buffer_1_index = 0;
-			}
-		}
-		else
-		{
-			update_speaker_1(buffer_1_b[buffer_1_index] << 4);
-			buffer_1_index++;
-
-			// receive full buffer from storage
-			if (buffer_1_index >= 16)
-			{
-				_receive_from_storage(buffer_1_b, 0);
-				buffer_1_mode = ONE;
-				buffer_1_index = 0;
-			}
-		}
+		update_speaker_1((uint16_t)(*storage_pointer_1++) << 4);
+		update_speaker_2((uint16_t)(*storage_pointer_2++) << 4);
+		storage_index++;
 
 		// if at max reset storage index to beginning
 		// 	so audio keeps playing
-		if (storage_index_1 >= storage_index_1_max)
+		if (storage_index >= LOCATION_SIZE)
 		{
-			storage_index_1 = location_1 * LOCATION_SIZE_ADDRESSABLE;
+			storage_pointer_1 = storage_pointer_1_start;
+			storage_pointer_2 = storage_pointer_2_start;
+			storage_index = 0;
 		}
 	}
 
 	TB0CCTL0 &= ~CCIFG;
-}
-
-// CCR1
-#pragma vector=TIMER0_B1_VECTOR
-__interrupt void speaker_2_ISR(void)
-{
-	static enum buffer_mode buffer_2_mode = ONE;
-
-	// cycle buffers to play from
-	if (buffer_2_mode == ONE)
-	{
-		update_speaker_2(buffer_2_a[buffer_2_index] << 4);
-		buffer_2_index++;
-
-		// receive full buffer from storage
-		if (buffer_2_index >= 16)
-		{
-			_receive_from_storage(buffer_2_a, 1);
-			buffer_2_mode = TWO;
-			buffer_2_index = 0;
-		}
-	}
-	else
-	{
-		update_speaker_2(buffer_2_b[buffer_2_index] << 4);
-		buffer_2_index++;
-
-		// receive full buffer from storage
-		if (buffer_2_index >= 16)
-		{
-			_receive_from_storage(buffer_2_b, 1);
-			buffer_2_mode = ONE;
-			buffer_2_index = 0;
-		}
-	}
-
-	// if at max reset storage index to beginning
-	// 	so audio keeps playing
-	if (storage_index_2 >= storage_index_2_max)
-	{
-		storage_index_2 = location_2 * LOCATION_SIZE_ADDRESSABLE;
-	}
-
-	TB0CCTL1 &= ~CCIFG;
 }

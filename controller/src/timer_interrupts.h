@@ -11,9 +11,9 @@ void init_timer_interrupts(void);
 void clear_mic_interrupt(void);
 void set_mic_interrupt(void);
 
-// turn the speaker interrupts off or on
+// turn the speaker interrupt off or on
 // should only be on in playing mode
-void clear_speaker_interrupts(void);
-void set_speaker_interrupts(void);
+void clear_speaker_interrupt(void);
+void set_speaker_interrupt(void);
 
 #endif

@@ -20,9 +20,7 @@ void init_timer_interrupts(void)
 
 	// 1MHz / 200Hz = 5kHz
 	// CCR0 is for sampling the mic and speaker 1
-	TB0CCR0 = 200;
-	// CCR1 is for speaker 2
-	TB0CCR1 = 100;
+	TB0CCR0 = 50;
 }
 
 void clear_mic_interrupt(void)
@@ -36,18 +34,13 @@ void set_mic_interrupt(void)
 	TB0CCTL0 |= CCIE;
 }
 
-void clear_speaker_interrupts(void)
+void clear_speaker_interrupt(void)
 {
 	TB0CCTL0 &= ~CCIE;
-
-	TB0CCTL1 &= ~CCIE;
 }
 
-void set_speaker_interrupts(void)
+void set_speaker_interrupt(void)
 {
 	TB0CCTL0 &= ~CCIFG;
 	TB0CCTL0 |= CCIE;
-
-	TB0CCTL1 &= ~CCIFG;
-	TB0CCTL1 |= CCIE;
 }
