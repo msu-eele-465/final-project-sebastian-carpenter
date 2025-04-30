@@ -4,8 +4,7 @@
 #include "../src/storage_mimic_2310.h"
 #include "intrinsics.h"
 
-// should an address be read first?
-static uint8_t expect_address = 1;
+#define INDEX_MAX 3
 
 int main(void)
 {
@@ -29,13 +28,11 @@ int main(void)
 	}
 }
 
-#define INDEX_MAX 2
-
 #pragma vector=PORT2_VECTOR
 __interrupt void storage_ISR(void)
 {
 	// storage access and reset variables
-	static uint8_t storage[INDEX_MAX * 4] = {0xAA, 0x55};
+	static uint8_t storage[INDEX_MAX * 4] = {0};
 	static uint8_t *storage_pointer_1 = storage;
 	static uint8_t *storage_pointer_2 = storage;
 	static uint8_t *storage_pointer_1_start = storage;
@@ -44,6 +41,9 @@ __interrupt void storage_ISR(void)
 	// register location storage
 	static uint8_t address_1 = 0;
 	static uint8_t address_2 = 0;
+
+	// should an address be read first?
+	static uint8_t expect_address = 1;
 
 	// storage limiter
 	static uint8_t storage_index_1 = 0;

@@ -65,8 +65,8 @@ int main(void) {
 
 		storage_mimic_write_mode();
 		storage_mimic_update(0x00);
-		storage_mimic_update(0x0F);
-		storage_mimic_update(0x0F);
+		storage_mimic_update(0xFF);
+		storage_mimic_update(0xFF);
 
 		storage_mimic_select_buffer_2();
 		storage_mimic_read_mode();
