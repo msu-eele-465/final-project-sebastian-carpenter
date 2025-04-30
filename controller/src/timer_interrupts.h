@@ -16,4 +16,10 @@ void set_mic_interrupt(void);
 void clear_speaker_interrupt(void);
 void set_speaker_interrupt(void);
 
+// turn the audio display interrupt off or on
+//  this is the audio levels displayed on the LED bar
+// should not be on while playing or recording
+void clear_audio_display_interrupt(void);
+void set_audio_display_interrupt(void);
+
 #endif

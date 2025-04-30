@@ -15,9 +15,13 @@
 #include "intrinsics.h"
 
 
-// each location is 971 bytes and there are 4 of them
+// each location is 7000 bytes and there are 4 of them
 #define LOCATION_SIZE 7000
 #define LOCATION_MAX 0x03
+
+// when displaying audio strength, how many samples should
+//	be checked to determine amplitude
+#define AUDIO_DISPLAY_SIZE 10
 
 
 /* --- important variables --- */
@@ -41,7 +45,8 @@ static uint8_t location_1 = 0, location_2 = 0;
 static uint8_t storage[LOCATION_SIZE * 4] = {0};
 
 // storage for audio, variety of variables to increase speed
-static uint8_t *storage_pointer_1, *storage_pointer_2;
+static uint8_t *storage_pointer_1 = storage;
+static uint8_t *storage_pointer_2 = storage;
 static uint8_t *storage_pointer_1_start, *storage_pointer_2_start;
 static uint16_t storage_index;
 
@@ -52,6 +57,10 @@ static uint16_t storage_index;
 // update the LCD with the relevant mode and location information
 // update the LED bar with the mic input strength
 void _update_state(void);
+
+// find the largest sample and display it according to a logarithmic scale
+// values checked are inclusive of buffer start and exclusive of buffer_end
+void _update_led_bar(uint8_t *buffer_start, uint8_t *buffer_end);
 
 
 /* --- main loop --- */
@@ -85,7 +94,6 @@ int main(void) {
 	configure_speaker_1();
 	configure_speaker_2();
 
-
 	// stores the movement of the rotary encoders whether CW or CCW
 	static enum rotary_encoder rotary_1, rotary_2;
 	init_rotary_encoders(&rotary_1, &rotary_2);
@@ -105,6 +113,10 @@ int main(void) {
             // THIS IS TEMPORARY
 			
 			_update_state();
+
+			// start displaying audio strength using the interrupt
+			sample_mic();
+			set_audio_display_interrupt();
         }
 
 
@@ -118,6 +130,7 @@ int main(void) {
         {
             if (system_mode == RECORD)
 			{
+				clear_audio_display_interrupt();
 				sample_mic();
 
 				system_mode = RECORDING;
@@ -138,9 +151,15 @@ int main(void) {
 				P5OUT &= ~BIT3;
 
 				system_mode = RECORD;
+
+				// start displaying audio strength using the interrupt
+				// the mic interrupt gives a sample that can be used so
+				//	sample_mic() does not need to be called
+				set_audio_display_interrupt();
 			}
 			else if (system_mode == PLAYBACK)
 			{
+				clear_audio_display_interrupt();
 				system_mode = PLAYING;
 
 				storage_pointer_1_start = storage + (uint16_t)(location_1) * LOCATION_SIZE;
@@ -160,6 +179,10 @@ int main(void) {
 				clear_speaker_interrupt();
 
 				system_mode = PLAYBACK;
+
+				// start displaying audio strength using the interrupt
+				sample_mic();
+				set_audio_display_interrupt();
 			}
 
 			_update_state();
@@ -272,24 +295,15 @@ void _update_state(void){
 	{
 		lcd_print_line(recording_line, 0);
 
-		// also update led bar with recording strength
-		uint8_t *temp_storage_pointer = storage_pointer_1;
-		uint8_t largest = *temp_storage_pointer;
-		uint8_t samples = 10;
-		while (--samples > 0)
+		// also update LED bar with recording strength
+		// the largest value over AUDIO_DISPLAY_SIZE is displayed
+		uint8_t *temp_storage_pointer = storage_pointer_1 - AUDIO_DISPLAY_SIZE;
+		if (temp_storage_pointer < storage)
 		{
-			// if beginning of storage is hit, terminate early
-			if (--temp_storage_pointer < storage)
-			{
-				samples = 0;
-			}
-			else if (*temp_storage_pointer > largest)
-			{
-				largest = *temp_storage_pointer;
-			}
+			temp_storage_pointer = storage;
 		}
 
-		update_led_bar(largest);
+		_update_led_bar(temp_storage_pointer, storage_pointer_1);
 	}
 	else if (system_mode == PLAYBACK)
 	{
@@ -309,11 +323,63 @@ void _update_state(void){
 	__delay_cycles(200000);
 }
 
+void _update_led_bar(uint8_t *buffer_start, uint8_t *buffer_end){
+	// find largest value within provided values
+	uint8_t largest = *buffer_start;
+	while (++buffer_start < buffer_end)
+	{
+		if (*buffer_start > largest)
+		{
+			largest = *buffer_start;
+		}
+	}
+
+	// update LED bar according to a logarithmic scale
+	if (largest > 203)
+	{
+		largest = 0xFF;
+	}
+	else if (largest > 161)
+	{
+		largest = 0x7F;
+	}
+	else if (largest > 128)
+	{
+		largest = 0x3F;
+	}
+	else if (largest > 102)
+	{
+		largest = 0x1F;
+	}
+	else if (largest > 81)
+	{
+		largest = 0x0F;
+	}
+	else if (largest > 64)
+	{
+		largest = 0x07;
+	}
+	else if (largest > 50)
+	{
+		largest = 0x03;
+	}
+	else if (largest > 40)
+	{
+		largest = 0x01;
+	}
+	else
+	{
+		largest = 0x00;
+	}
+
+	update_led_bar(largest);
+}
+
 
 /* --- interrupts --- */
 
 
-// CCR0
+// CCR0 TIMER0
 #pragma vector=TIMER0_B0_VECTOR
 __interrupt void speaker_and_mic_ISR(void)
 {
@@ -337,8 +403,6 @@ __interrupt void speaker_and_mic_ISR(void)
 	}
 	else if (system_mode == PLAYING)
 	{
-		// speaker 1
-
 		update_speaker_1((uint16_t)(*storage_pointer_1++) << 4);
 		update_speaker_2((uint16_t)(*storage_pointer_2++) << 4);
 		storage_index++;
@@ -354,4 +418,25 @@ __interrupt void speaker_and_mic_ISR(void)
 	}
 
 	TB0CCTL0 &= ~CCIFG;
+}
+
+// CCR0 TIMER1
+#pragma vector=TIMER1_B0_VECTOR
+__interrupt void audio_display_ISR(void)
+{
+	static uint8_t audio_buffer[AUDIO_DISPLAY_SIZE];
+	static uint8_t audio_buffer_index = 0;
+
+	record_mic(audio_buffer[audio_buffer_index]);
+	sample_mic();
+
+	if (audio_buffer_index > AUDIO_DISPLAY_SIZE)
+	{
+		audio_buffer_index = 0;
+	}
+
+	// display the largest value over a span of AUDIO_DISPLAY_SIZE
+	_update_led_bar(audio_buffer, audio_buffer + AUDIO_DISPLAY_SIZE);
+
+	TB1CCTL0 &= ~CCIFG;
 }
