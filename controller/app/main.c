@@ -12,16 +12,23 @@
 
 // update
 #include "../src/timer_interrupts.h"
+
+// misc
 #include "intrinsics.h"
 
 
 // each location is 7000 bytes and there are 4 of them
+// @20kHz this should be ~350ms of audio data per location
 #define LOCATION_SIZE 7000
 #define LOCATION_MAX 0x03
 
 // when displaying audio strength, how many samples should
 //	be checked to determine amplitude
 #define AUDIO_DISPLAY_SIZE 10
+
+// how many poll cycles (~200ms) should elapse before moving
+//	into a locked state
+#define CYCLES_TO_LOCK 5
 
 
 /* --- important variables --- */
@@ -35,6 +42,11 @@ enum system_mode_enum {
 // stores the state of the system
 // this can be changed by the main loop or interrupts
 static enum system_mode_enum system_mode = LOCKED;
+
+// hold the mode button to increment this value
+// when lock_cycles == CYCLES_TO_LOCK system_mode will
+// 	change to LOCKED
+static uint8_t lock_cycles;
 
 // these locations are references to a portion of the
 // 	memory for the recorded/recording audio
@@ -66,6 +78,8 @@ void _update_led_bar(uint8_t *buffer_start, uint8_t *buffer_end);
 /* --- main loop --- */
 
 
+#define toggle_heartbeat() P5OUT ^= BIT4
+
 int main(void) {
 
     // stop watchdog timer
@@ -81,11 +95,11 @@ int main(void) {
 
 	init_timer_interrupts();
 
-    // configure hearbeat and status LED as outputs
-    P2SEL0 &= ~(BIT0 | BIT1);
-    P2SEL1 &= ~(BIT0 | BIT1);
-    P2OUT &= ~(BIT0 | BIT1);
-    P2DIR |= BIT0 | BIT1;
+    // configure status LED (P5.3) and heartbeat (P5.4) as outputs
+    P5SEL0 &= ~(BIT3 | BIT4);
+    P5SEL1 &= ~(BIT3 | BIT4);
+    P5OUT &= ~(BIT3 | BIT4);
+    P5DIR |= BIT3 | BIT4;
 
     // turn on I/O
     PM5CTL0 &= ~LOCKLPM5;
@@ -101,23 +115,34 @@ int main(void) {
 	__enable_interrupt();
 
 
+	// start displaying audio strength using the interrupt
+	sample_mic();
+	set_audio_display_interrupt();
+
     while (1)
     {
         // get password
 
 
-        while (system_mode == LOCKED)
-        {
-            // MODE SHOULD START IN LOCKED STATE
-            system_mode = RECORD;
-            // THIS IS TEMPORARY
-			
-			_update_state();
+		while (system_mode == LOCKED)
+		{
+			// if start/stop pressed exit LOCKED state
+			// this is to simulate latching a password from the
+			//  accelerometer which is currently not working
+			if (P6IN & BIT4 && !(P6IN & BIT5))
+			{
+				system_mode = RECORD;
 
-			// start displaying audio strength using the interrupt
-			sample_mic();
-			set_audio_display_interrupt();
-        }
+				_update_state();
+
+				// delay an extra second to prevent recording on accident
+				__delay_cycles(1000000);
+			}
+			else
+			{
+				_update_state();
+			}
+		}
 
 
 		// get pushbutton press
@@ -192,29 +217,42 @@ int main(void) {
 		// 	mode		-> pressed
 		else if (!(P6IN & BIT4) && P6IN & BIT5)
 		{
+
 			// the system must not be performing an action when
 			// 	switching modes (RECORDING, PLAYING)
 			if (system_mode == RECORD)
 			{
 				system_mode = PLAYBACK;
+
 			}
 			else if (system_mode == PLAYBACK)
 			{
 				system_mode = RECORD;
 			}
 
-			_update_state();
-		}
-		else if (P6IN & BIT4 && P6IN & BIT5)
-		{
 			// the system must not be performing an action when
 			// 	becoming locked (RECORDING, PLAYING)
 			if (system_mode == RECORD || system_mode == PLAYBACK)
 			{
-				system_mode = LOCKED;
+				lock_cycles++;
+
+				if (lock_cycles >= CYCLES_TO_LOCK)
+				{
+					system_mode = LOCKED;
+				}
 			}
 
 			_update_state();
+		}
+		else
+		{
+			// mode button was not pressed so reset lock_cycles
+			// technically start/stop could be pressed to prevent this
+			// 	but covering this case does not really matter
+			lock_cycles = 0;
+
+			__delay_cycles(20000);
+			toggle_heartbeat();
 		}
 
 
@@ -255,7 +293,7 @@ int main(void) {
 				_update_state();
 			}
 		}
-    }
+	}
 }
 
 
@@ -321,6 +359,8 @@ void _update_state(void){
 	// delay for 200ms
 	// this prevents a switch from being pressed multiple times on accident
 	__delay_cycles(200000);
+
+	toggle_heartbeat();
 }
 
 void _update_led_bar(uint8_t *buffer_start, uint8_t *buffer_end){
