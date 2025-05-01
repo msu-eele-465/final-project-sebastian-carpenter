@@ -1,6 +1,8 @@
-#include "src/led_bar.h"
+#include "intrinsics.h"
 #include <msp430fr2355.h>
 #include <stdint.h>
+
+#include "../src/led_bar.h"
 
 int main(void) {
 
@@ -12,25 +14,18 @@ int main(void) {
     // turn on I/O
     PM5CTL0 &= ~LOCKLPM5;
 
-    uint16_t i, j;
-    for (i = 0; i < 100; i++)
+    while (1)
     {
-        for (j = 0; j < 10000; j++);
+        __delay_cycles(1000000);
+
+        update_led_bar(-1);
+
+        __delay_cycles(1000000);
+
+        update_led_bar(0x07);
+
+        __delay_cycles(1000000);
+
+        update_led_bar(0xF0);
     }
-
-    update_led_bar(-1);
-
-    for (i = 0; i < 100; i++)
-    {
-        for (j = 0; j < 10000; j++);
-    }
-
-    update_led_bar(3);
-
-    for (i = 0; i < 100; i++)
-    {
-        for (j = 0; j < 10000; j++);
-    }
-
-    update_led_bar(1020);
 }
